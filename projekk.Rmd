@@ -1,0 +1,256 @@
+---
+title: "Analisis Sentimen"
+author: "Anita Ainandiyah 123180029 & Nurul Ainia Septiana 12380010"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r rlib}
+library(tm)
+library(wordcloud2)
+library(vroom)
+library(here)
+
+setwd("D:/KULIAH/SEMESTER 5/DATA SCIENCE/projek")
+```
+
+## Cleaning Dataset
+```{r load dataset}
+datanya <- vroom(here('D:/KULIAH/SEMESTER 5/DATA SCIENCE/projek/twfhenCleaned.csv'))
+komen <- datanya$x
+komenc <- Corpus(VectorSource(komen))
+removeURL <- function(x) gsub("http[^[:space:]]*", "", x)
+reviewclean <- tm_map(komenc, removeURL)
+removeNL <- function(y) gsub("\n", " ", y)
+reviewclean <- tm_map(reviewclean, removeNL)
+replacecomma <- function(y) gsub(",", "", y)
+reviewclean <- tm_map(reviewclean, replacecomma)
+removeRT <- function(y) gsub("RT ", "", y)
+reviewclean <- tm_map(reviewclean, removeRT)
+removetitik2 <- function(y) gsub(":", "", y)
+reviewclean <- tm_map(reviewclean, removetitik2)
+removetitikkoma <- function(y) gsub(";", " ", y)
+reviewclean <- tm_map(reviewclean, removetitikkoma)
+removetitik3 <- function(y) gsub("p…", "", y)
+reviewclean <- tm_map(reviewclean, removetitik3)
+removeamp <- function(y) gsub("&amp;", "", y)
+reviewclean <- tm_map(reviewclean, removeamp)
+removeUN <- function(z) gsub("@\\w+", "", z)
+reviewclean <- tm_map(reviewclean, removeUN)
+remove.all <- function(xy) gsub("[^[:alpha:][:space:]]*", "", xy)
+reviewclean <- tm_map(reviewclean,remove.all)
+reviewclean <- tm_map(reviewclean, removePunctuation)
+reviewclean <- tm_map(reviewclean, tolower)
+myStopwords = readLines("D:/KULIAH/SEMESTER 5/DATA SCIENCE/projek/stopwords-en.txt")
+reviewclean <- tm_map(reviewclean,removeWords,myStopwords)
+
+dataframe<-data.frame(text=unlist(sapply(reviewclean, `[`)), stringsAsFactors=F)
+View(dataframe)
+write.csv(dataframe,file = 'D:/KULIAH/SEMESTER 5/DATA SCIENCE/projek/dataclean.csv')
+```
+
+## Bagan/Scarletplot
+```{r bagi data}
+library(e1071)
+library(caret)
+library(syuzhet)
+#digunakan untuk membaca file csv yang sudah di cleaning data 
+datanya<-read.csv("D:/KULIAH/SEMESTER 5/DATA SCIENCE/projek/dataclean.csv",stringsAsFactors = FALSE)
+#digunakan untuk mengeset variabel cloumn text menjadi char
+review <-as.character(datanya$text)
+#Calls the NRC sentiment dictionary to calculate the presence of eight different emotions and their corresponding valence in a text file.
+
+s <- get_nrc_sentiment(review, cl = NULL, language = "english", lowercase = TRUE)
+
+review_combine<-cbind(datanya$text,s)
+par(mar=rep(3,4))
+a<- barplot(colSums(s),col=rainbow(10), xlab ='emotion', ylab='count',main='sentiment analisis')
+iki_ba <- a
+```
+
+## Wordcloud
+```{r bagi data2}
+#library untuk penggunaan corpus dalam cleaning data
+library(tm)
+library(RTextTools)
+#library yang terdapat sebuah algoritma naivebayes
+library(e1071)
+library(dplyr)
+library(caret)
+df<-read.csv("D:/KULIAH/SEMESTER 5/DATA SCIENCE/projek/dataclean.csv",stringsAsFactors = FALSE)
+glimpse(df)
+
+#Set the seed of R‘s random number generator, which is useful for creating simulations or random objects that can be reproduced.
+set.seed(20)
+df<-df[sample(nrow(df)),]
+df<-df[sample(nrow(df)),]
+glimpse(df)
+
+corpus<-Corpus(VectorSource(df$text))
+corpus
+inspect(corpus[1:10])
+#fungsinya untuk membersihkan data data yang tidak dibutuhkan 
+corpus.clean<-corpus%>%
+    tm_map(content_transformer(tolower))%>%
+    tm_map(removePunctuation)%>%
+    tm_map(removeNumbers)%>%
+    tm_map(removeWords, c("work", "from", "home"))%>%
+    tm_map(removeWords,stopwords(kind="en"))%>%
+    tm_map(stripWhitespace)
+dtm<-DocumentTermMatrix(corpus.clean)
+
+inspect(dtm[1:10,1:20])
+
+df.train<-df[1:50,]
+df.test<-df[51:100,]
+
+dtm.train<-dtm[1:50,]
+dtm.test<-dtm[51:100,]
+
+corpus.clean.train<-corpus.clean[1:50]
+corpus.clean.test<-corpus.clean[51:100]
+
+dim(dtm.train)
+fivefreq<-findFreqTerms(dtm.train,5)
+length(fivefreq)
+
+dtm.train.nb<-DocumentTermMatrix(corpus.clean.train,control = list(dictionary=fivefreq))
+
+#dim(dtm.train.nb)
+
+dtm.test.nb<-DocumentTermMatrix(corpus.clean.test,control = list(dictionary=fivefreq))
+
+dim(dtm.test.nb)
+ 
+convert_count <- function(x){
+    y<-ifelse(x>0,1,0)
+    y<-factor(y,levels=c(0,1),labels=c("no","yes"))
+    y
+}
+trainNB<-apply(dtm.train.nb,2,convert_count)
+testNB<-apply(dtm.test.nb,1,convert_count)
+
+
+library(wordcloud)
+wordcloud(corpus.clean,min.freq = 4,max.words=100,random.order=F,colors=brewer.pal(8,"Dark2"))
+
+```
+
+## Shiny
+```{r global}
+library(shiny)
+library(here)
+library(vroom)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(syuzhet)
+
+twitter<- vroom(here("D:/KULIAH/SEMESTER 5/DATA SCIENCE/projek/dataclean.csv"))
+twitter2<- vroom(here("D:/KULIAH/SEMESTER 5/DATA SCIENCE/projek/data-pos.csv"))
+twitter3<- vroom(here("D:/KULIAH/SEMESTER 5/DATA SCIENCE/projek/data-neg.csv"))
+tweet<- twitter$text
+tweet2<- twitter2$text
+tweet3<- twitter3$text
+ui <- fluidPage(
+    titlePanel("sentiment analisis kebijakan pemerintah work from home"),
+        mainPanel(
+            
+            tabsetPanel(type = "tabs",
+                        tabPanel("Bagan", plotOutput("scatterplot")), 
+                        # Plot
+                        tabPanel("Data", DT::dataTableOutput('tbl1')),
+                        tabPanel("Data positif", DT::dataTableOutput('tbl2')),
+                        tabPanel("Data negatif", DT::dataTableOutput('tbl3')),
+                        # Output Data Dalam Tabel
+                        tabPanel("Wordcloud", plotOutput("Wordcloud"))
+                        )
+        )
+    )
+# SERVER
+server <- function(input, output) {
+    
+
+    # Output Data
+    output$tbl1 = DT::renderDataTable({
+        DT::datatable(twitter, options = list(lengthChange = FALSE))
+    })
+    output$tbl2 = DT::renderDataTable({
+        DT::datatable(twitter2, options = list(lengthChange = FALSE))
+    })
+    output$tbl3 = DT::renderDataTable({
+        DT::datatable(twitter3, options = list(lengthChange = FALSE))
+    })
+    
+    output$scatterplot <- renderPlot({produk_dataset<-read.csv("D:/KULIAH/SEMESTER 5/DATA SCIENCE/projek/dataclean.csv",stringsAsFactors = FALSE)
+
+review <-as.character(produk_dataset$text)
+
+
+s<-get_nrc_sentiment(review)
+
+review_combine<-cbind(produk_dataset$text,s)
+par(mar=rep(3,4))
+barplot(colSums(s),col=rainbow(10),ylab='count',main='sentiment analisis kebijakan pemerintah "work from home"')
+    }, height=400)
+    output$Wordcloud <- renderPlot({
+   set.seed(20)
+df<-df[sample(nrow(df)),]
+df<-df[sample(nrow(df)),]
+glimpse(df)
+
+corpus<-Corpus(VectorSource(df$text))
+corpus
+inspect(corpus[1:10])
+#fungsinya untuk membersihkan data data yang tidak dibutuhkan 
+corpus.clean<-corpus%>%
+    tm_map(content_transformer(tolower))%>%
+    tm_map(removePunctuation)%>%
+    tm_map(removeNumbers)%>%
+    tm_map(removeWords,stopwords(kind="en"))%>%
+    tm_map(removeWords, c("work", "from", "home"))%>%
+    tm_map(stripWhitespace)
+dtm<-DocumentTermMatrix(corpus.clean)
+
+inspect(dtm[1:10,1:20])
+
+df.train<-df[1:50,]
+df.test<-df[51:100,]
+
+dtm.train<-dtm[1:50,]
+dtm.test<-dtm[51:100,]
+
+corpus.clean.train<-corpus.clean[1:50]
+corpus.clean.test<-corpus.clean[51:100]
+
+dim(dtm.train)
+fivefreq<-findFreqTerms(dtm.train,5)
+length(fivefreq)
+
+dtm.train.nb<-DocumentTermMatrix(corpus.clean.train,control = list(dictionary=fivefreq))
+
+#dim(dtm.train.nb)
+
+dtm.test.nb<-DocumentTermMatrix(corpus.clean.test,control = list(dictionary=fivefreq))
+
+dim(dtm.test.nb)
+ 
+convert_count <- function(x){
+    y<-ifelse(x>0,1,0)
+    y<-factor(y,levels=c(0,1),labels=c("no","yes"))
+    y
+}
+trainNB<-apply(dtm.train.nb,2,convert_count)
+testNB<-apply(dtm.test.nb,1,convert_count)
+
+
+library(wordcloud)
+wordcloud(corpus.clean,min.freq = 4,max.words=100,random.order=F,colors=brewer.pal(8,"Dark2"))
+  })
+}
+shinyApp(ui = ui, server = server)
+```
